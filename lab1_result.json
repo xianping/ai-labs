@@ -1,0 +1,25 @@
+{
+   "token_usage":{
+      "completion_tokens":502,
+      "prompt_tokens":44,
+      "total_tokens":546,
+      "completion_tokens_details":{
+         "accepted_prediction_tokens":"None",
+         "audio_tokens":"None",
+         "reasoning_tokens":133,
+         "rejected_prediction_tokens":"None"
+      },
+      "prompt_tokens_details":{
+         "audio_tokens":"None",
+         "cached_tokens":0
+      },
+      "prompt_cache_hit_tokens":0,
+      "prompt_cache_miss_tokens":44
+   },
+   "model_provider":"openai",
+   "model_name":"deepseek-v4-flash",
+   "system_fingerprint":"fp_8b330d02d0_prod0820_fp8_kvcache_20260402",
+   "id":"14a0b29d-5b3a-49ed-b261-f8377ffea9a2",
+   "finish_reason":"stop",
+   "logprobs":"None"
+}
