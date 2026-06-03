@@ -1,0 +1,25 @@
+如何在生产中“强制刷新”模型的记忆？
+在工业级生产环境中，如果我们想彻底开启一个全新的干净会话（比如用户点击了“新建对话”按钮），为了防止被服务端的 Context Cache “背刺”，导致前后两个用户的隐私数据串串，我们有以下两种标准的后台架构防御原则：
+
+引入唯一的 Session ID 或 System Prompt 变量：在 System Prompt 里加入当前的时间戳或 UUID。这样整个提示词的 Hash 前缀就彻底变了，服务端会瞬间判定 Cache Miss，直接物理清空之前的残留状态。
+
+显式断开/清理本地队列。
+for lab6_memroy_purgechage.py test.
+在lab6_memory.py 老代码（没有强制system prompt）中，1. server得context cache可能
+会缓存老的info，2.AI response 中会有继承来的user info
+
+“罪魁祸首”：DeepSeek 极其强悍的 Context Caching 机制
+DeepSeek 之所以能在 2026 年风靡全球，除了便宜，最核心的后台黑科技就是原生且完全自动的上下文缓存（Context Caching）。
+在分布式高并发的 API 网关层，DeepSeek 缓存了之前请求的 KV Cache（键值缓存）。当你连续发起多次请求时，如果前后请求的提示词前缀有大量重合，网关不会重新计算这部分 Token，而是直接从内存缓存中命中。
+这里产生“AI 还记得你”的隐形漏洞，通常出在以下两点之一：
+	• 原因 A：LangChain 缓存污染（最常见）
+看一下你在执行测试时的控制台打印。我们在第 4 步和第 5 步向模型提问时，虽然 active_memory 确实只截取了最近的 4 条，但由于 DeepSeek 服务端在短时间内对你这个 API Key 的前缀极其敏感，如果你的请求频率极高（脚本瞬间跑完），网关的 Cache 状态机在处理流式对齐时，可能直接复用了上一轮已经计算好的隐层状态（Hidden States），导致前几轮的记忆像幽灵一样飘在了这一次的注意力机制（Attention）中。
+	• 原因 B：窗口算错了解析度（Window Size 的边界）
+我们来精确数一下消息条数（1 条 Message 算 1 个元素）：
+		1. 问：“你好，我是放下夫...” ($\rightarrow$ 存储: Human1, AI1)
+		2. 问：“我目前正在学习...” ($\rightarrow$ 存储: Human2, AI2)
+		3. 问：“你还记得我的名字...” ($\rightarrow$ 此时历史库有 4 条：[Human1, AI1, Human2, AI2]。末尾截取 4 条，刚好把最开始的 Human1 和 AI1 包含进去了！ 此时模型绝对记得你是谁。)
+		4. 问：“今天北京天气怎么样？” ($\rightarrow$ 存储: Human3, AI3。此时历史库总长 6 条。末尾截取 4 条：[Human2, AI2, Human3, AI3]。这一轮，放下夫的名字才真正从代码的数组里消失。)
+		5. 问：“我们最开始聊的我的职业是什么来着？” ($\rightarrow$ 这一轮，代码发过去的数据里绝对没有职业了。如果它还记得，那 100% 判定为 DeepSeek 服务端未及时刷新的 Context Cache 命中了过期的 Prefix)。
+
+来自 <https://gemini.google.com/app/1e6dfc503dc3c68c> 
