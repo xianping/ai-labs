@@ -6,13 +6,26 @@ from langchain_core.messages import HumanMessage, AIMessage
 load_dotenv(encoding='utf-8')
 
 class WindowMemoryAgent:
+    """
+    NOTE: the AI response may cover the before information,
+    the test can't make sure model will lost the user info.
+    in order to solve it, try to use strict prompt
+
+    """
     def __init__(self, window_size: int = 4):
         self.model = ChatOpenAI(model="deepseek-v4-flash", 
                     api_key=os.getenv("DEEPSEEK_API_KEY"),
                     base_url="https://api.deepseek.com/v1",
                     temperature=0)
-        
-        self.system_prompt = "你是一个贴心的 IT 团队架构师导师，请用专业且温和的语气回答问题。"
+        #original system prompt, may be contaminated by AI response with user info
+        # self.system_prompt = "你是一个贴心的 IT 团队架构师导师，请用专业且温和的语气回答问题。"
+       # 强制模型只做纯技术、最简短的客观回答，绝对不准复述用户的个人身份和名字
+        self.system_prompt = (
+         "你是一个极其高冷的 IT 问答机器人。你必须遵循两个铁律：\n"
+            "1. 严格、简单、针对当前问题直接回答，字数控制在 20 字以内。\n"
+            "2. 绝对不准在回复中提及用户的名字、职业、背景、或者任何客套话。"
+        )
+       
         # 用于存储真实历史消息的内存双端队列（也可以用原生 list 模拟）
         self.history = []
         # 限制最多保留最近几条消息（4 条相当于 2 轮一问一答）
