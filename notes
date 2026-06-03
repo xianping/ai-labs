@@ -22,4 +22,3 @@ DeepSeek 之所以能在 2026 年风靡全球，除了便宜，最核心的后�
 		4. 问：“今天北京天气怎么样？” ($\rightarrow$ 存储: Human3, AI3。此时历史库总长 6 条。末尾截取 4 条：[Human2, AI2, Human3, AI3]。这一轮，放下夫的名字才真正从代码的数组里消失。)
 		5. 问：“我们最开始聊的我的职业是什么来着？” ($\rightarrow$ 这一轮，代码发过去的数据里绝对没有职业了。如果它还记得，那 100% 判定为 DeepSeek 服务端未及时刷新的 Context Cache 命中了过期的 Prefix)。
 
-来自 <https://gemini.google.com/app/1e6dfc503dc3c68c> 
