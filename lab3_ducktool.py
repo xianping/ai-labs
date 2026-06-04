@@ -63,8 +63,9 @@ async def main():
         print("\n📥 所有并发网络数据已整齐回填，正在发起第二阶段最终聚合...")
         
         # 第二阶段：把完美的队列发回，大模型会将两个搜索结果融合，输出终极研报
-        final_response = await model_with_tools.ainvoke(messages)
-        
+        # final_response = await model_with_tools.ainvoke(messages)
+        final_response = await model.ainvoke(messages)
+
         print("\n✨ [AI 行业研究员最终联网报告]：\n")
         print(final_response.content)
     else:
