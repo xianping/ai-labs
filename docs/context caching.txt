@@ -1,0 +1,171 @@
+Question: 测试short memory，发现DS server 返回内容可能有记忆之前的功能。
+Answer：
+
+一句话：DeepSeek API的这项特性被称为**上下文硬盘缓存（Context Caching on Disk）**。它是一项默认开启的性能优化技术，目的是通过复用之前的计算结果来降低延迟和成本。
+
+它的缓存对象和处理方式与我们通常理解的缓存有所不同，我将通过下面几个部分为你详细解析其机制。
+
+### 🤖 缓存的核心：不是“答案”，而是“计算状态”
+
+你之前遇到的“模型记性太好”，恰恰是这项技术正常工作的体现。DeepSeek的缓存**并非**像传统缓存那样直接存储对话的输出或最终答案。它缓存的是模型在处理特定**输入前缀**时内部生成的注意力键值对（KV Cache）。
+
+这是一个相当重要的区别：
+
+*   **传统缓存**：当输入相同（例如 `key = "user:1001"`），直接返回之前缓存好的`value`（用户信息）。
+*   **DeepSeek 上下文缓存**：它的缓存对象是模型在处理`system prompt`或历史对话时产生的、关于这个上下文的**计算状态**。后续请求如果包含**完全相同的上下文前缀**，就可以直接复用这部分计算好的状态，而不需要模型再算一遍。
+
+**缓存的是“读懂了前面内容所需要的计算”，而不是“读懂了之后给出的回答”**。因此，它不会直接输出固定的答案，模型的最终回答依然是根据`temperature`等参数全新生成的。
+
+### 🔑 核心规则：缓存是一个“完整单元”的匹配
+
+这项机制的核心在于**缓存前缀匹配（Prefix Matching）**，并且遵循“**完整单元匹配**”原则。DeepSeek的`/chat/completions`接口本身设计是**无状态的（Stateless）**，服务端的缓存是为了优化性能，而不是用来维持对话的核心机制。
+
+服务端会以固定的`tokens`作为分界点，将你的请求内容切分成一个个独立的、完整的**缓存前缀单元**。
+
+#### 1. 完全命中 🎯
+
+如下图所示，后续请求**必须**完整地包含某个已经被缓存的单元，才能命中该单元的缓存。
+
+<div style="text-align: center;">
+  <img src="https://raw.githubusercontent.com/ContextCache/flowchat/main/全命中.png?token=GHSAT0AAAAAAC5APDGZJOK32UZNNXITMDO6Z3P2LPA" alt="完全命中示意图" style="max-width: 90%; height: auto; border-radius: 8px;">
+</div>
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Server
+    Note over Client: 你的首次请求内容是 A+B
+    Client->>Server: 发送请求 A+B
+    Note over Server: 处理 A+B 输入，<br>将 A+B 作为一个<br>独立的缓存单元落盘
+    
+    Note over Client: 第二轮请求内容是 A+B+C
+    Client->>Server: 发送请求 A+B+C
+    Note over Server: 检测到完整匹配了<br>已落盘的 A+B 单元
+    Server->>Client: 复用 A+B 缓存，<br>仅需计算 C
+```
+
+**多轮对话举例**
+你第一次提问：
+```python
+messages = [
+    {"role": "system", "content": "你是一名助手"},
+    {"role": "user", "content": "你好"}
+]
+```
+第二次提问：
+```python
+messages = [
+    {"role": "system", "content": "你是一名助手"},
+    {"role": "user", "content": "你好"},
+    {"role": "assistant", "content": "你好！有什么可以帮您？"},
+    {"role": "user", "content": "帮我查天气"}
+]
+```
+第二次请求的`system`消息和第一句`user`消息，完整匹配了第一次请求的内容，因此可以命中缓存。
+
+#### 2. 部分命中（渐进式缓存）🔄
+
+这是渐进式缓存，是指即使当前请求未能完全命中任何已有缓存单元，服务端也能从中学习，将公共部分创建为新的缓存单元供未来使用。
+
+<div style="text-align: center;">
+  <img src="https://raw.githubusercontent.com/ContextCache/flowchat/main/部分命中.png?token=GHSAT0AAAAAAC5APDGZMTZGB67NBKWVWDTKZ3P2LXA" alt="部分命中示意图" style="max-width: 90%; height: auto; border-radius: 8px;">
+</div>
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Server
+
+    Note over Client: 首次请求 A+B
+    Client->>Server: 发送 A+B
+    Note over Server: 处理请求，A+B落盘
+
+    Note over Client: 第二请求 A+C
+    Client->>Server: 发送 A+C
+    Note over Server: A+C ≠ A+B，无法命中缓存。
+    Note over Server: 但系统检测到公共前缀 A
+    Note over Server: 将公共前缀 A 作为新的缓存单元落盘
+
+    Note over Client: 第三轮请求 A+D
+    Client->>Server: 发送 A+D
+    Note over Server: 检测到完整匹配了 A 缓存单元
+    Server->>Client: 复用 A 的缓存，仅计算 D
+```
+
+**内容分析对话举例**
+你第一次提问：
+```python
+{"role": "system", "content": "你是财报分析师..."}
+{"role": "user", "content": "<长文档全文>\n\n请总结"}
+```
+第二次提问：
+```python
+{"role": "system", "content": "你是财报分析师..."}
+{"role": "user", "content": "<长文档全文>\n\n请分析盈利"}
+```
+虽然这两次请求无法互相命中。但在它们完成后，系统会识别出 `system` + 用户输入中的`<长文档全文>`是公共部分，并将其作为新的缓存单元落盘。
+
+#### 3. 缓存未命中 ❌
+
+只要`messages`数组的起始部分有任何不同，缓存就无法命中。
+
+```python
+# 第一次请求
+{"role": "system", "content": "你是助手"}, {"role": "user", "content": "你好"}
+
+# 第二次请求：无法命中，因为前缀完全不同
+{"role": "system", "content": "你是助手"}, {"role": "user", "content": "Tell me a joke."}
+```
+
+### ⚙️ 缓存的生命周期与落盘时机
+
+缓存单元主要在以下情况被创建并写入磁盘：
+
+1.  **请求结束边界落盘**：每一次API请求，系统都会在**用户输入结束位置**和**模型输出结束位置**生成两个缓存前缀单元。这确保了多轮对话的核心部分能被缓存。
+2.  **公共前缀检测落盘**：当系统检测到多次请求之间存在公共前缀（如上述财报示例），会将其作为独立的缓存单元落盘。
+3.  **固定间隔落盘**：为了处理非常长的输入/输出，系统会以固定`tokens`间隔自动创建缓存单元，避免因内容过长而导致完全无法被缓存。
+
+缓存有其生命周期，创建后会**自动管理**：
+*   **自动淘汰**：如果一个缓存单元**不再被使用，它会在几小时到几天内被系统自动清空**。
+*   **数据隔离**：你的缓存数据**不会被用于其他用途**，并且用户之间的缓存是**逻辑上相互隔离**的，保障了安全和隐私。
+
+### 📊 如何确认缓存命中？
+
+你可以在API返回的结果中，通过`usage`字段下的两个指标来监测缓存命中情况：
+
+*   `prompt_cache_hit_tokens`：本次请求输入中，缓存命中的`tokens`数量。
+*   `prompt_cache_miss_tokens`：本次请求输入中，缓存未命中的`tokens`数量。
+
+### ⚠️ 关键细节与已知限制
+
+在利用或调试缓存机制时，以下细节需要留意：
+
+*   **缓存粒度**：缓存系统以**64个`tokens`为一个存储单元**，不足64个`tokens`的内容不会被缓存。
+*   **前缀要求**：缓存匹配要求重复内容**从第0个`token`开始就必须完全相同**，中间开始的重复无法命中。
+*   **随机性保留**：如前所述，缓存命中不影响模型输出的随机性，它只是让模型“更快地读到上下文”，并不是让它“记住”一个固定答案。
+*   **历史信息与缓存的关系**：虽然缓存能让模型更快地处理历史，但你需要确保在`messages`数组中手动维护要发送的历史内容。`sleep(1)`会破坏缓存匹配，影响复用效果，但不会影响模型在`messages`数组中看到的历史信息。
+*   **已知限制**：DeepSeek V4 Pro等特定版本可能不支持前缀缓存，且目前没有直接的API参数来开启或关闭此功能。
+
+### 💎 总结
+
+所以，你观察到的“记忆”现象，本质上是因为DeepSeek的缓存机制智能地复用了与你对话历史（`messages`数组内容）相关的计算结果。这项技术通过在服务端缓存对话前缀的计算状态，**静态地加速了重复的计算任务，而非动态地维持会话**。如果想要彻底重置对话，**手动管理 `messages` 数组**依然是掌握主动权最可靠的方式。
+
+所以，caching是一个严肃字节级别token的prefix match。
+如果需要充分利用caching：
+1. 稳定内容放在前面 
+例如：system Prompt
+    固定规则
+    工具说明
+    长文档
+    历史上下文
+    本轮问题
+所以，如果测试要干扰caching，完全可以在开头加上current time 
+2. system prompt不要频繁改动
+3. 长文档问答最好保持前后一致，不做任何修改
+比如：
+第一次Q:
+{"role": "system", "content": "你是财报分析师..."}
+{"role": "user", "content": "<长文档全文>\n\n请总结"}
+第二次Q:
+{"role": "system", "content": "你是财报分析师..."}
+{"role": "user", "content": "<长文档全文>\n\n请分析盈利"}
