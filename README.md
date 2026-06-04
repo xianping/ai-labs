@@ -1,1 +1,5 @@
-experiment for AI related development
+lab1: learn langchain LCEL chain expression
+lab2: 结构化输出，用PydanticOutputParser 强制model output 符合object 定义格式。
+lab3 tools：langchain community 三方的DuckDuckGoSearchRun tool 测试工具调用需求。
+            最终结果model 和 model binding tools 需要分开，不然tool结果污染model 最后返回总结内容。Search
+lab3 ducktool：构建并发异步。

@@ -1,0 +1,25 @@
+Q:我一直用model_binding_tools的绑定tool的模型传递message，把tool的调用结果和tool 返回message都放进去了。然后这个发给deepseek model，结果是空的，用的是deepseek-v4-flash
+Answer：
+refer： https://api-docs.deepseek.com/guides/thinking_mode
+V4 协议改变 使用的reasoning 模式，需要有个reasoning_content 字段）
+这是一个非常经典且棘手的问题，尤其在开发 Agent 时。它背后的根本原因，正是 `deepseek-v4-flash` 默认开启的“思考模式”（Thinking Mode）所带来的一个特殊协议要求。
+
+简单来说，**当你使用带工具绑定的模型进行调用时，必须在后续的请求中完整地回传模型返回的 `reasoning_content` 字段，即使它的值是空字符串，也绝不能省略。**
+
+### 🔎 根本原因：思考模式下的协议约束
+
+*   **核心机制**：`deepseek-v4-flash` 和 `deepseek-v4-pro` 在调用 API 时默认是“思考模式”（Thinking Mode）。在这种模式下，模型的响应会包含一个额外的字段：**`reasoning_content`**，记录其思考过程。
+*   **协议约束**：根据 DeepSeek 的官方文档，当模型在思考模式下进行**工具调用（tool_calls）** 时，客户端**必须在所有后续的 API 请求中，原样回传之前收到的 `reasoning_content` 字段**。如果不这样做，API 就会返回 `400` 错误，或者像你遇到的那样，直接不返回任何内容。
+
+### 🤔 为什么你的消息结构正确，却得到空结果？
+
+关键在于你使用的 **Agent 框架或你自己编写的代码**。像 WorkBuddy 这类知名工具，就是因为这个新协议问题而出现了兼容性错误。当你的 Agent 框架完成对模型的第一次调用并获取结果后，它会构建下一次的请求。常见的逻辑是仅将 `user`、`assistant`、`tool` 等标准消息重新组织发给模型，而在组装消息时**错误地遗漏了 `reasoning_content` 字段**。模型收到一个“不完整”的请求后，无法正确理解上下文，便不会生成或生成空的`assistant`回复。
+
+### ⚠️ 一个特别需要注意的坑：`reasoning_content` 为空的场景
+
+更麻烦的是，当工具调用的意图对于模型来说**过于显而易见**时，它返回的 `reasoning_content` 可能会是一个**空字符串** (`""`)。在这种情况下，如果你的代码因为其值为空而将其丢弃（例如，不包含在后续请求的 `messages` 数组中），同样会触发错误，因为协议要求的是“原样回传”，无论其内容是否为空。
+
+### 💡 解决方案
+
+1.  **正确回传 `reasoning_content`**：这是根本的解决办法。在你的 Agent 中，缓存模型每次返回的 `reasoning_content` 字段，并在构建下一次请求时，将它**无缝地**作为上一条 `assistant` 消息的一部分回传给 API。
+2.  **暂时关闭思考模式（临时方案）**：如果你需要立即解决问题，可以尝试在初始化模型时，显式关闭思考模式。
