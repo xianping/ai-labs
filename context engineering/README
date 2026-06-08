@@ -1,0 +1,25 @@
+context_eng_1: test one basic context engineering. 
+学习如何context injection（few shots），结构化json输出约束，xml标签隔离
+
+context_eng_2: test 没有工作年限，只讲了java工作2年，全站3年，系统没有推断NULL，而是5年工作。
+
+context_pydantic: 用pydantic注入json 返回结果，更加准确。工作年限NULL推断。
+把规则写在离它要控制的字段最近的地方。
+Pydantic 则是主动把字段定义、业务逻辑、限制条件完美打包在一起，直接推入大模型的 Working Memory（工作记忆）中。这就是为什么 Pydantic 版本的 Agent 往往展现出极其惊人的稳定性和准确性。
+
+
+context_eng_langchain: 产生error 400错误。因为“Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}”
+这是一个极其经典且非常宝贵的跨生态对接 Bug。
+
+报错信息非常明确：This response_format type is unavailable now（当前不可用此类型的 response_format）。
+原生写法是：response_format={"type": "json_object"}。
+
+但是，LangChain 的 with_structured_output(ResumeSchema) 是一个高级封装方法。在默认情况下，LangChain 猜你用的是标准的 OpenAI 官方模型，因此它在底层会优先尝试使用 OpenAI 最新的 json_schema 模式（即 response_format={"type": "json_schema", "json_schema": ...}）。
+
+然而，DeepSeek 目前的 API 接口只支持最基础的 json_object 模式，还不支持这种更复杂的 json_schema 传参格式。当 LangChain 把这种高级格式发给 DeepSeek 时，DeepSeek 的网关就直接抛出 400 报错拒绝了。
+fix:1. structured_llm = llm.with_structured_output(ResumeSchema, method="json_mode") 增加method
+    2. 当我们将 LangChain 的 method 改为 "json_mode" 时，LangChain 在底层只会向大模型发送一条模糊的指令：“请吐出 JSON 格式”。它不会再自动把 Pydantic 定义的各种字段描述和 Schema 偷偷塞进 Prompt 里了。
+
+为了让大模型知道我们要什么字段，我们必须像写原生代码一样，把 Schema 的结构手动放进 Prompt 模版里
+
+context_eng_langchain2 ： 一个fix问题的版本。跑通。
