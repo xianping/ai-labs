@@ -1,6 +1,10 @@
-** summary_memory_mannual: ** 手动写一个summary，专门一个agent func去做summary
+## summary_memory_mannual: 
+手动写一个summary，专门一个agent func去做summary
 
-** summary_memroy_langchain:**  用langchain去做mannual一样的事情。发现收益不高。
+## summary_memroy_langchain:
+用langchain去做mannual一样的事情。
+ **发现收益不高**。
+
 但，他有几个收益如下：
 深度复盘：高级框架在此处的“阳谋”
 你仔细观察这段代码，会发现一个非常有意思的现象：哪怕用上了 LangChain 的 LCEL 管道符语法，我们依然在外面包裹了一个 LangChainSummaryMemoryAgent 的 Python 类，并手动写了 if len(...) >= max_buffer_turns: 以及 _compress_memory_internal 触发器。
@@ -14,7 +18,8 @@
 MessagesPlaceholder(variable_name="...") 的降维打击：
 在原生 Python 中，我们要小心翼翼地处理 messages.extend（解包列表）和 messages.append（单条添加）的数据结构陷阱。而在 LangChain 中，通过 MessagesPlaceholder，我们可以直接把完整的 [HumanMessage, AIMessage] 数组直接丢进字典，框架会在底层自动完成极其安全、合规的扁平化解包，彻底消灭了人为拼错 API 格式的隐患。
 
-** summary_memroy_langgraph: ** 这才是langGraph使用的场景。
+## summary_memroy_langgraph:  
+ *这才是langGraph使用的场景。*
 
 在 LangGraph 里，你是在做图形化架构设计：
 
