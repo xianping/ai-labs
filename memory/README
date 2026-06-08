@@ -1,0 +1,25 @@
+** summary_memory_mannual: ** 手动写一个summary，专门一个agent func去做summary
+
+** summary_memroy_langchain:**  用langchain去做mannual一样的事情。发现收益不高。
+但，他有几个收益如下：
+深度复盘：高级框架在此处的“阳谋”
+你仔细观察这段代码，会发现一个非常有意思的现象：哪怕用上了 LangChain 的 LCEL 管道符语法，我们依然在外面包裹了一个 LangChainSummaryMemoryAgent 的 Python 类，并手动写了 if len(...) >= max_buffer_turns: 以及 _compress_memory_internal 触发器。
+
+为什么强大的框架不直接帮我们把这些全部封装成一行代码？
+
+这就是现代高级 AI 架构师必须具备的“清醒认知”：
+
+状态（State）应该归宿于你的系统，而不是模型本身。 真实的生产系统往往伴随着数据库（如 Redis、PostgreSQL）的读写。如果框架用一个黑盒把你所有的记忆逻辑包死，你将无法在记忆压缩的瞬间，将 Summary 同步异步地持久化保存到用户的数据库画像中。
+
+MessagesPlaceholder(variable_name="...") 的降维打击：
+在原生 Python 中，我们要小心翼翼地处理 messages.extend（解包列表）和 messages.append（单条添加）的数据结构陷阱。而在 LangChain 中，通过 MessagesPlaceholder，我们可以直接把完整的 [HumanMessage, AIMessage] 数组直接丢进字典，框架会在底层自动完成极其安全、合规的扁平化解包，彻底消灭了人为拼错 API 格式的隐患。
+
+** summary_memroy_langgraph: ** 这才是langGraph使用的场景。
+
+在 LangGraph 里，你是在做图形化架构设计：
+
+彻底解耦的节点：chat_node 只负责聊天并把聊天记录塞进历史；compress_node 只负责做总结并清空历史。它们之间互不关心，甚至可以由两个团队分开写。
+
+声明式的路由控制：通过 add_conditional_edges，你的业务流程变成了清晰的图纸。如果以后老板说：“不要满 3 轮才总结，改成 Token 超过 2000 再总结”，你只需要去改 should_compress_router 这一个控制面函数，数据面的所有节点代码连一个标点符号都不用动。
+
+完美解决死循环：在复杂的 Agent 项目中，通过给边加上流向计数，LangGraph 可以极其简单地限制“大模型调用工具如果连续失败超过 3 次，立刻强制引流到报错退出节点”，这是 LangChain 绝对无法优雅做到的。
