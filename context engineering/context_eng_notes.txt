@@ -1,0 +1,15 @@
+本节核心学习目标
+结构化 Prompt 设计：摆脱面条式的提示词，改用模块化的结构（Role-Task-Constraint-Output）。
+
+动态 Few-shot 注入：学会根据用户的输入，动态选择、拼接最适合的示例，教大模型“举一反三”。
+
+严格的结构化输出控制（JSON Mode）：让 Agent 必须返回完美的 JSON，以便我们的 Python 代码可以直接 json.loads() 解析，避免解析报错导致程序崩溃
+** 重点学习知识与核心原理 **
+为什么用 XML 标签约束？（<Role>, <Constraints>）
+随着 Prompt 越来越长，大模型容易“顾头不顾尾”。使用 XML 标签可以将 Prompt 进行语义隔离。在大模型的 Attention 机制中，这能帮它更清晰地定位：“哪里是规矩，哪里是例子，哪里是任务”。
+
+Dynamic Few-shot 的工程价值
+如果把所有的例子都塞给 Prompt，会导致 Token 暴涨（不仅多花钱，还会让模型分心）。动态注入的逻辑是：根据用户的输入（可以用关键词匹配，或者后续我们会学到的向量检索 Embedding），只把最像的 1-2 个例子捞出来塞进 Context。这既省钱，效果又最好。
+
+response_format={"type": "json_object"} (JSON Mode)
+这是现代大模型 API 最重要的工程特性。普通 Prompt 经常会吐出 json ...  这样的 Markdown 标记，甚至附带一句“这是你要的 JSON”。这在代码里会引发 json.loads() 报错。开启 JSON Mode，API 会在底层的 Token 采样层面进行强制约束，确保吐出来的 100% 是纯净、可解析的 JSON 字符串。
