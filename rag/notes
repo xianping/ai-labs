@@ -9,9 +9,29 @@ use hugging face local model as embedding.
 pip install langchain-huggingface sentence-transformers
 This can work for ingesting documents, processing into embedding vectors.
 
+*为什么要做router？
+无论用户问什么，系统都会雷打不动地去向量库里捞一把。
+
+如果用户问：“下周二我能居家吗？”，去库里检索是非常正确的。
+但如果用户只是跟 Agent 打个招呼说：“你好！”，或者问一个常识性问题：“今天晚上吃什么比较健康？”，这时候 RAG 依然会强行去库里匹配 Top-2 的长期记忆。
+
+这会导致两个严重后果：
+
+-垃圾片段污染上下文：向量库会硬凑出两个相似度最高的冷门规定塞给大模型，导致 System Prompt 里充满了无关的噪音。
+
+-算力与 Token 的浪费：大模型每次都要被迫去读那些毫无关系的“记忆片段”，不仅拉长了响应时间，还浪费了你的 API 额度。
+
 ##langgraph_router_rag.py
  有错误，因为deepseek 不支持openai的json schema response
 openai.BadRequestError: Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}
+这个 400 BadRequestError 是由于我们使用了 LangChain 的 llm.with_structured_output()，它在底层默认使用了 OpenAI 最新的 response_format={"type": "json_schema", ...}（即严格模式 Structured Outputs）。
 
+然而，DeepSeek 官方目前对标准的 json_schema 格式支持有特定的限制。如果你请求的参数格式没有完美对上它的 API 规范，或者使用的底层 SDK 版本在拼接参数时触碰了它尚未完全开放的特性，服务器就会狠狠抛回：This response_format type is unavailable now
 ##langgraph_router_rag2.py
 fix json issue by using pydantic output parser. PydanticOutputParser
+为什么这种方案在工业界更受欢迎？
+摆脱服务商捆绑（Vendor Lock-in）：
+依靠 with_structured_output 极其依赖底层的特定 API（如 OpenAI 独家的 JSON Schema Mode）。一旦你切换到开源模型、私有化部署的大模型、或者像 DeepSeek 这种目前对该高级参数报错的端点，系统就会直接崩溃。而 PydanticOutputParser 是纯客户端 Python 逻辑，任何只要能吐出文字的 LLM 都能完美兼容。
+
+显式注入控制：
+当你打印 format_instructions 时，你会发现它自动帮你在提示词里追加了一段符合 JSON 规范的 schema 说明，大模型配合 temperature=0.1，生成极为稳定。
