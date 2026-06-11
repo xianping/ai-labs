@@ -1,0 +1,13 @@
+flowchart LR
+    subgraph State全局共享字段
+        S1[query: 用户课题<br/>research_notes: 累积资料<br/>critic_feedback: 评审批注<br/>loop_count: 循环计数<br/>final_report: 最终报告]
+    end
+
+    START([START]) --> N1[researcher_node<br/>读取query+feedback<br/>→追加research_notes，loop_count+1]
+    N1 --> N2[critic_node<br/>校验资料充足性<br/>→写入critic_feedback+充足标记]
+    N2 --> COND{条件路由}
+    
+    COND -- 资料不足 & 循环<3 --> N1
+    COND -- 资料充足 | 循环≥3熔断 --> N3[reporter_node<br/>聚合笔记→生成final_report<br/>Chroma持久化向量]
+    
+    N3 --> END([END])

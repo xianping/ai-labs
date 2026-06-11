@@ -1,0 +1,10 @@
+1. ChromaHFEmbeddingFunction 这里面name 必须是函数，但是deepseek chat 给我代码建议是property
+修改过成name（）后，几轮讨论，他仍然给property。
+说明：deepseek的记忆“漂移”有问题。
+
+2. 方便debug，用chatdeepseek取代openai client
+
+3. DeepSeek thinking模式与结构化输出冲突、openai 支持thinking 参数，DS 不支持
+4. DuckDuckGo包名变更ddgs
+5. ChromaHFEmbeddingFunction 的override 函数embed_query 可能传入list
+6. 事实证明，critic模型经常让action模型一直做，达不到要求，需要强制收敛。这个质量堪忧。
