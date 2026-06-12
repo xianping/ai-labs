@@ -21,7 +21,7 @@
 进行讨论，为啥critic认为结论不行？researcher需要调整数据源，还是深入某个维度方向？
 
 ## critic_research_agent3.py
-Add one debate_room node, to let researcher and cirtic to debate if the collections
+Add one **debate_room** node, to let researcher and cirtic to debate if the collections
 from researcher can match Critic requires.
 The drawback is there is only one round of debating.
 This leads us to think of how to design the REAL multi-agent, muti-round debating.
