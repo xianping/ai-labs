@@ -6,22 +6,27 @@ load_dotenv(encoding='utf-8')
 from crewai import Agent, Task, Crew, Process
 from langchain_openai import ChatOpenAI
 
-# 1. 依照你的本地标准规范，初始化 DeepSeek 模型 (供 CrewAI 底层无缝调用)
-llm = ChatOpenAI(
-    model="deepseek-v4-flash",                  # 统一的通用对话模型名称
-    base_url=os.getenv("DEEPSEEK_BASE_URL"),    # 官方 API 网关
-    api_key=os.getenv("DEEPSEEK_API_KEY"),
-    temperature=0.3
-)
 
-# 2. 定义团队成员角色 (Agents) - 注入 Backstory 引导 DeepSeek 扮演特定人格
+# 确保 OpenAI 兼容的环境变量（不然运行报错。说明crewai底层用了openai默认配置）
+os.environ["OPENAI_API_KEY"] = os.getenv("DEEPSEEK_API_KEY")
+os.environ["OPENAI_BASE_URL"] = os.getenv("DEEPSEEK_BASE_URL")
+
+# No need to build ChatOpenAI object. CrewAI reads these native or custom fields.
+# For custom OpenAI compatible endpoints, we structure the string as: "openai/model_name"
+# and pass the base_url/api_key either via env variables or direct agent config.
+
+# 2. 定义团队成员角色 (Agents) 
 researcher = Agent(
     role='资深技术研究员',
     goal='挖掘关于 {topic} 的前沿技术架构和核心演进趋势',
     backstory="""你在一家顶级科技研究院工作，擅长从繁杂的技术资产中筛选出最具行业颠覆性的核心突破点。
     你提供的信息必须严谨、准确且富有深度。""",
     verbose=True,
-    llm=llm  # 注入你的标准 DeepSeek 实例
+    # 🌟 用字符串定义模型，并通过特殊的 base_url / api_key 传入
+    llm="deepseek-v4-flash",
+    base_url=os.getenv("DEEPSEEK_BASE_URL"),
+    api_key=os.getenv("DEEPSEEK_API_KEY"),
+    temperature=0.3
 )
 
 writer = Agent(
@@ -30,7 +35,10 @@ writer = Agent(
     backstory="""你是一位拥有百万粉丝的科技博主，文笔专业且富有表现力。
     你擅长捕捉研究报告中的高光数据，用完美的 Markdown 结构将其呈现给读者。""",
     verbose=True,
-    llm=llm  # 注入同一个 DeepSeek 实例实现协同
+    llm="deepseek-v4-flash",
+    base_url=os.getenv("DEEPSEEK_BASE_URL"),
+    api_key=os.getenv("DEEPSEEK_API_KEY"),
+    temperature=0.3
 )
 
 # 3. 定义任务流水线 (Tasks) - 显式声明预期输出
