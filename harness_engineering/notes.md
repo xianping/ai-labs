@@ -50,7 +50,7 @@
 在这个实战中，我们将构建一个具有**极高工业区分度**的 Judge 引擎，来评测一个**客服类 Agent 的“用户意图安抚度”与“方案准确率”**。为了演示效果，我特意在测试集中塞入了一个“态度极好但业务全错（幻觉）”的 Agent Bad Case，看我们的 Harness 能不能精准把它揪出来。
 
 ## harness_advance_judge.py 为啥高级
-你的直觉非常敏锐，直接点破了工程表象！你说得完全没错：**从 Python 代码的骨架来看，它的流转逻辑确实只是循环、调用 API 和打印报告，这和基础版本大同小异。**
+**从 Python 代码的骨架来看，它的流转逻辑确实只是循环、调用 API 和打印报告，这和基础版本大同小异。**
 
 如果仅仅把“高级”理解为“改一改 Prompt 文本”，那是对 Harness Engineering 的矮化。课题 A 的精髓，也是它被称为“Prompt 拓扑与度量设计（Prompt Topology & Metrics Design）”**的原因，在于利用大模型的底层生成机理，在非确定性的文本空间中，建立一套**具备数学稳定性、区分度和抗干扰的“工程卡点机制”。
 
@@ -118,3 +118,70 @@
 这，就是 Harness Engineering 课题 A 的硬核底层逻辑。
 
 理解了这一点，你才算真正拿到了工业级评测的钥匙。我们可以继续推演，看看在更复杂的 RAG 场景下，这种“控死黑盒”的工程思想又是如何演变成 **课题 B：RAG 检索三元组度量（RAG Triad）** 的？
+
+## RAG triad
+### 1. RAG 流程
+query -> retriever -> context -> Generator LLM -> Response
+
+把 RAG 系统拆成三个关键质量维度：
+- 上下文相关性（检索器好不好） , query > context
+- 忠实度 / 可信度（生成器有没有幻觉）, context > response
+- 答案相关性（整体是否答非所问）, query > response 
+
+### 2. CoT
+CoT（Chain-of-Thought）的本质是：让模型先显式推理，再下结论，而不是直接吐一个结果。
+
+1. 在这段代码里，CoT 体现在两个地方：
+
+```   class AuditReport(BaseModel):
+       reasoning: str = Field(..., description="深度审计流（Thinking/Reasoning），必须详述扣分或给分的严密逻辑支撑。")
+       score: int = Field(..., description="量化评分，必须严格限定在 1 到 5 分之间（1分最差，5分完美）。")
+   ```
+
+数据结构层面：reasoning 字段
+
+     - reasoning 强制要求模型把“怎么打的分”写出来；
+
+score 是最终结论。
+这就是典型的“CoT 结构化输出”。
+2. **Prompt 指令层面：先写推理再评分三个 Prompt 里都有一句类似：**
+先在 reasoning 中一步步输出你的深度审计流（…），最后给出 1-5 的整数评分。
+
+例如上下文相关性的 Prompt：
+先在 reasoning 中一步步输出你的深度审计流（寻找 Chunk 中的事实点，识别无效噪声），最后给出 1-5 的整数评分。
+
+这就是在显式要求模型做 CoT 推理：
+* 先逐条分析上下文有没有有用事实；
+* 再判断噪声多少；
+* 最后映射到 1–5 分。
+
+### 3. RAG triad 三元组
+| 指标 | 审计对象 | 核心问题 | 优化方向示例|
+| :----- | :------: | :------:| :------: |
+| 上下文相关性  | 检索器 Retriever    | 检索到的上下文是否与查询高度相关？有无大量噪声？  | 调分块策略、换 Embedding、调 Top-K 等 |
+| 忠实度 Faithfulness / Groundedness  | 生成器 Generator LLM    | 检答案是否严格基于上下文？有没有“幻觉”（捏造事实）？  | 换模型、加 anti-hallucination Prompt 等 |
+| 答案相关性 Answer Relevance  | 整体 RAG 端到端   | 最终答案是否直接、完整地回答了用户问题？是否答非所问？  | 改 Prompt、增强指令遵循、调系统提示等 |
+
+### 4. 理念
+**理念**：
+这段代码体现的是“评估驱动 + 结构化评审 + 生产运维”的 Agent 开发方式，而不是只写一个一次性 RAG Demo。
+
+**RAG：**
+通过三个审计函数分别检查 Query-Context、Context-Response、Query-Response 三条边，就是在对 RAG 的检索器和生成器做白盒评估。
+
+**CoT：**
+通过 reasoning 字段 + Prompt 中的“先一步步推理，再打分”指令，把评审过程显式化、结构化，这是 CoT 在工程上的落地。
+
+**RAG Triad：**
+就是这三个审计维度构成的“评估三角”，用来系统化地度量 RAG 效果，并定位问题出在检索还是生成端
+
+
+## BUGS:
+lab3_rag_triad_harness.py running error. Beause pydantic structured output in openAI using
+json_schema, but DeepSeek only support 'json_mode', so need do modification below with 'method' parameter.
+*structured_llm = llm.with_structured_output(AuditReport, method="json_mode")*
+
+Still error happens-->
+Error code: 400 - {'error': {'message': "Prompt must contain the word 'json' in some form to use 'response_format' of type 'json_object'.", 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}} 
+* because DeepSeek ask prompte contains Json keyword.*
+fix: add Json ask in prompt
