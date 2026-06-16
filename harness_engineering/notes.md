@@ -119,7 +119,7 @@
 
 理解了这一点，你才算真正拿到了工业级评测的钥匙。我们可以继续推演，看看在更复杂的 RAG 场景下，这种“控死黑盒”的工程思想又是如何演变成 **课题 B：RAG 检索三元组度量（RAG Triad）** 的？
 
-## RAG triad
+## 课题B:RAG triad
 ### 1. RAG 流程
 query -> retriever -> context -> Generator LLM -> Response
 
