@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: langfuse-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: langfuse
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  langfuse-web:
+    image: langfuse/langfuse:2
+    container_name: langfuse-web
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      - NODE_ENV=production
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=my_ultra_secure_nextauth_secret_key_123  # 生产环境建议更换
+      - SALT=my_ultra_secure_salt_value_123
+      - DATABASE_URL=postgresql://postgres:postgrespassword@postgres:5432/langfuse
+      # 开启账号密码登录
+      - LANGFUSE_ENABLE_SIGN_UP=true
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:
