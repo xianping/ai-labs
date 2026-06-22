@@ -32,3 +32,12 @@ MessagesPlaceholder(variable_name="...") 的降维打击：
 ## persistent streaming 
 持久化记忆机制
 流失输出
+
+- thread_id 是持久化硬路由的唯一凭证：
+在最后一部分的测试中你会清晰地看到，当我们在 config 中传入 thread_id: "user_session_999" 时，大模型在第二轮能极其精准地叫出你叫“小明”并知道你是“Python工程师”，这是因为 MemorySaver 把整个图的中间状态切片绑在了解析键 user_session_999 下。当换成 user_session_888 后，大模型立刻表示不知道你是谁，完美实现了多用户并行的状态隔离与会话管理。
+
+- stream_mode="updates" 的机制：
+在 graph.stream(...) 中，我们使用了 stream_mode="updates"。这是 LangGraph 原生的高层流式抽象。只要图内的任何一个节点（Node）执行完毕并返回了更新数据，这个生成器就会立刻向外扔出（yield）一个字典，其格式为 { "节点名称": { 节点的 return 字典 } }。在复杂的 Multi-Agent 架构中，前端就是靠这个机制来实时感知到底现在是 Planner 在思考，还是 Generator 在抓取网页的。
+
+- add_messages 减负状态控制：
+在定义 AgentState 时，对 messages 键使用了 Annotated[..., add_messages]。这意味着我们在节点中不需要手写 state['messages'] + [new_msg] 去痛苦地拼接历史列表，LangGraph 只要看到节点返回了新的 {"messages": [response]}，就会依据底层 reducer 协议，自动增量 append 进该 thread 的全局持久化历史中。
