@@ -28,3 +28,7 @@ MessagesPlaceholder(variable_name="...") 的降维打击：
 声明式的路由控制：通过 add_conditional_edges，你的业务流程变成了清晰的图纸。如果以后老板说：“不要满 3 轮才总结，改成 Token 超过 2000 再总结”，你只需要去改 should_compress_router 这一个控制面函数，数据面的所有节点代码连一个标点符号都不用动。
 
 完美解决死循环：在复杂的 Agent 项目中，通过给边加上流向计数，LangGraph 可以极其简单地限制“大模型调用工具如果连续失败超过 3 次，立刻强制引流到报错退出节点”，这是 LangChain 绝对无法优雅做到的。
+
+## persistent streaming 
+持久化记忆机制
+流失输出
